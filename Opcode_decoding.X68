@@ -55,8 +55,9 @@ code0000:
     MOVE.B  #'.',(A2)+
                 ;ISOLATE TWO BITS USING AND
      MOVE.B D0,D3
+     MOVE.B D0, D4        ;For effective address
      ANDI.B #%1100000, D3
-     CMP.B #$00,D3 ;If statements to check if byte or word or long
+     CMP.B #$00,D3       ;If statements to check if byte or word or long
      BEQ BYTE      
      CMP.B #$40,D3
      BEQ WORD
@@ -86,6 +87,18 @@ DONE:
      CLR D3
      
      JSR ITOA                 ;RETURNS HERE AFTER CONVERSION
+     MOVE.B  #$9,(A2)+
+     MOVE.B  #',',(A2)+
+
+     CLR D5
+     MOVE.B D4,D5
+     ANDI.B #%00111000,D5
+     CMP #00010000, D5
+     BEQ ARI              
+ARI: JSR ADDRESS_REGISTER_INDIRECT   ;D4 has REGISTER NUMBER
+     
+     
+
      MOVE.B #0, (A2)+         ;ADD NULL TERMINATER
      MOVE.B  #13, D0         ; PRINT BUFFER
      LEA     buffer, A1
@@ -94,7 +107,7 @@ DONE:
         ;JMP     END
 code0001: ;MOVEA and MOVE
 
-
+ 
 
         JMP     END
 code0010:
@@ -183,7 +196,32 @@ LOOPFORASCII:
 
     RTS
    
-  
+DATA_REGISTER_DIRECT:
+        MOVE.B  #'D',(A2)+   ;D4 has value
+        ANDI.B #%00000111, D4  
+        ADD.B #48, D4
+        MOVE.B  D4,(A2)+
+        RTS
+ADDRESS_REGISTER_DIRECT:
+
+ADDRESS_REGISTER_INDIRECT:
+        MOVE.B  #'A',(A2)+   ;D4 has value
+        ANDI.B #%00000111, D4  
+        ADD.B #48, D4
+        MOVE.B  D4,(A2)+
+        RTS
+
+ADDRESS_REGISTER_DIRECT_POST:
+
+ADDRESS_REGISTER_DIRECT_PRE:
+
+ABSOLUTE_ADDRESS_WORD:
+
+ABSOLUTE_ADDRESS_LONG:
+
+
+
+ 
 TRUE: DC.B    'True',0 ;64 bytes
 FALSE: DC.B    'False',0 ;64 bytes
 ENDING: DC.B    'Ending',0 ;64 bytes
