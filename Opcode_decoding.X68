@@ -94,10 +94,19 @@ DONE:
      MOVE.B D4,D5
      ANDI.B #%00111000,D5
      CMP #00010000, D5
-     BEQ ARI              
+     BEQ ARI
+     CMP #00000000, D5
+     BEQ DRD           ;Data register direct
+     CMP #00011000, D5
+     BEQ ARDP
+     CMP #00100000, D5
+
+DRD: JSR DATA_REGISTER_DIRECT   
+                             
 ARI: JSR ADDRESS_REGISTER_INDIRECT   ;D4 has REGISTER NUMBER
      
-     
+ARDP: JSR ADDRESS_REGISTER_DIRECT_POST      ;Address register direct post increment
+
 
      MOVE.B #0, (A2)+         ;ADD NULL TERMINATER
      MOVE.B  #13, D0         ; PRINT BUFFER
@@ -205,10 +214,12 @@ DATA_REGISTER_DIRECT:
 ADDRESS_REGISTER_DIRECT:
 
 ADDRESS_REGISTER_INDIRECT:
+        MOVE.B  #'(',(A2)+   ;D4 has value
         MOVE.B  #'A',(A2)+   ;D4 has value
         ANDI.B #%00000111, D4  
         ADD.B #48, D4
         MOVE.B  D4,(A2)+
+        MOVE.B  #')',(A2)+   ;D4 has value
         RTS
 
 ADDRESS_REGISTER_DIRECT_POST:
