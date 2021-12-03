@@ -93,21 +93,21 @@ DONE:
      CLR D5
      MOVE.B D4,D5
      ANDI.B #%00111000,D5
-     CMP #00010000, D5
-     BEQ ARI
-     CMP #00000000, D5
+     CMP #%00010000, D5
+     BEQ ARI               ;ADDRESS REGISTER INDIRECT
+     CMP #%00000000, D5
      BEQ DRD           ;Data register direct
-     CMP #00011000, D5
+     CMP #%00011000, D5
      BEQ ARDP
-     CMP #00100000, D5
+     CMP #%0010000, D5
 
 DRD: JSR DATA_REGISTER_DIRECT   
-                             
+      BRA FINISH                       
 ARI: JSR ADDRESS_REGISTER_INDIRECT   ;D4 has REGISTER NUMBER
-     
+     BRA FINISH
 ARDP: JSR ADDRESS_REGISTER_DIRECT_POST      ;Address register direct post increment
 
-
+FINISH
      MOVE.B #0, (A2)+         ;ADD NULL TERMINATER
      MOVE.B  #13, D0         ; PRINT BUFFER
      LEA     buffer, A1
