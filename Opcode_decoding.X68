@@ -56,7 +56,7 @@ code0000:
                 ;ISOLATE TWO BITS USING AND
      MOVE.B D0,D3
      MOVE.B D0, D4        ;For effective address
-     ANDI.B #%1100000, D3
+     ANDI.B #%11000000, D3
      CMP.B #$00,D3       ;If statements to check if byte or word or long
      BEQ BYTE      
      CMP.B #$40,D3
@@ -106,7 +106,9 @@ DRD: JSR DATA_REGISTER_DIRECT
 ARI: JSR ADDRESS_REGISTER_INDIRECT   ;D4 has REGISTER NUMBER
      BRA FINISH
 ARDP: JSR ADDRESS_REGISTER_DIRECT_POST      ;Address register direct post increment
-
+      BRA FINISH
+ABSOLUTE_ADD: JSR ABSOLUTE_ADDRESS
+      BRA FINISH
 FINISH
      MOVE.B #0, (A2)+         ;ADD NULL TERMINATER
      MOVE.B  #13, D0         ; PRINT BUFFER
@@ -181,29 +183,6 @@ code1111:
     TRAP    #15
     JMP     END
 
-ITOA:
-    
-LOOPFORASCII: 
-     MOVE.B (A5)+,D5 ;get two hex values
-     MOVE.W D5,D2     ; put it in a word so rotating works
-     ROR.W #4, D2     ;ROTATE four bits so they end up on far left side, and isolates other 4 bits
-     ADD.B #55, D2    ;Add the the four least significant bits
-     MOVE.B  D2,(A2)+ ;MOVE ASCII VALUE TO BUFFER
-     SUB.B D2,D2 ;Get rid of value already read
-     
-     
-     ROL.W #4, D2     ;ROTATE FOUR BITS BACK TO FRONT
-     ADD.B #55, D2     ;ADD 55
-     MOVE.B  D2,(A2)+   ;ADD to BUFFER
-     SUB.B D2,D2        ;REMOVE BITS
-
- 
-     SUBQ.B #1, D1      ;DECREMENT LOOP
-     BNE LOOPFORASCII
-     
-
-
-    RTS
    
 DATA_REGISTER_DIRECT:
         MOVE.B  #'D',(A2)+   ;D4 has value
@@ -212,6 +191,11 @@ DATA_REGISTER_DIRECT:
         MOVE.B  D4,(A2)+
         RTS
 ADDRESS_REGISTER_DIRECT:
+        MOVE.B  #'A',(A2)+   ;D4 has value
+        ANDI.B #%00000111, D4  
+        ADD.B #48, D4
+        MOVE.B  D4,(A2)+     ;NUmber
+        RTS
 
 ADDRESS_REGISTER_INDIRECT:
         MOVE.B  #'(',(A2)+   ;D4 has value
@@ -223,13 +207,65 @@ ADDRESS_REGISTER_INDIRECT:
         RTS
 
 ADDRESS_REGISTER_DIRECT_POST:
+         MOVE.B  #'(',(A2)+   ;D4 has value
+        MOVE.B  #'A',(A2)+   ;D4 has value
+        ANDI.B #%00000111, D4  
+        ADD.B #48, D4
+        MOVE.B  D4,(A2)+
+        MOVE.B  #')',(A2)+   ;D4 has value
+        MOVE.B  #'+',(A2)+
+        RTS
 
 ADDRESS_REGISTER_DIRECT_PRE:
+        MOVE.B  #'(',(A2)+   ;D4 has value
+        MOVE.B  #'A',(A2)+   ;D4 has value
+        ANDI.B #%00000111, D4  
+        ADD.B #48, D4
+        MOVE.B  D4,(A2)+
+        MOVE.B  #')',(A2)+   ;D4 has value
+        MOVE.B  #'-',(A2)+
+        RTS
 
-ABSOLUTE_ADDRESS_WORD:
-
-ABSOLUTE_ADDRESS_LONG:
-
+ABSOLUTE_ADDRESS:
+        MOVE.B  #'$',(A2)+
+ 
+        RTS
+ITOA:
+    
+LOOPFORASCII: 
+     MOVE.B (A5)+,D5 ;get two hex values
+     MOVE.W D5,D2     ; put it in a word so rotating works
+     ROR.W #4, D2     ;ROTATE four bits so they end up on far left side, and isolates other 4 bits
+     
+     CMP.B #10, D2
+     BLT NUMBER
+     BRA HEX
+NUMBER:
+     ADD.B #48, D2    
+     BRA NEXT 
+HEX:     
+     ADD.B #55, D2    ;Add the the four least significant bits
+     BRA NEXT
+NEXT:     
+     MOVE.B  D2,(A2)+ ;MOVE ASCII VALUE TO BUFFER
+     SUB.B D2,D2 ;Get rid of value already read
+     ROL.W #4, D2     ;ROTATE FOUR BITS BACK TO FRONT
+     
+     CMP.B #10, D2
+     BLT NUMBER2
+     BRA HEX2
+NUMBER2:
+     ADD.B #48, D2    
+     BRA NEXT2 
+HEX2:     
+     ADD.B #55, D2    ;Add the the four least significant bits
+     BRA NEXT2
+NEXT2:     
+      MOVE.B  D2,(A2)+   ;ADD to BUFFER
+     SUB.B D2,D2        ;REMOVE BITS
+     SUBQ.B #1, D1      ;DECREMENT LOOP
+     BNE LOOPFORASCII
+     RTS
 
 
  
