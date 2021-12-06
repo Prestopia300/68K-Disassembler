@@ -101,7 +101,9 @@ DONE:
      BEQ ARDP           ;Go to post increment
      CMP #%00100000, D5
      BEQ ARD             ;Go to address register decrement
-     
+     CMP #%00111000, D5
+     BEQ ABSOLUTE_ADD      ;Go to absolute addressing
+      
 DRD: JSR DATA_REGISTER_DIRECT   
       BRA FINISH                       
 ARI: JSR ADDRESS_REGISTER_INDIRECT   ;D4 has REGISTER NUMBER
@@ -231,7 +233,18 @@ ADDRESS_REGISTER_DECREMENT:
 
 ABSOLUTE_ADDRESS:
         MOVE.B  #'$',(A2)+
- 
+        ANDI.B #%00000111, D4
+        CMP.B #%00000000, D4    ;ABSOLUTE ADDRESS IS WORD LENGTH
+        BEQ WORD_LENGTH
+        CMP.B #%00000001, D4
+        BEQ LONG_LENGTH
+WORD_LENGTH:        
+        MOVE.B #2,D1
+        JSR ITOA
+        RTS
+LONG_LENGTH:
+        MOVE.B #4,D1
+        JSR ITOA
         RTS
 ITOA:
     
