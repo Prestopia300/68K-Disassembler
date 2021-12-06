@@ -98,14 +98,17 @@ DONE:
      CMP #%00000000, D5
      BEQ DRD           ;Data register direct
      CMP #%00011000, D5
-     BEQ ARDP
-     CMP #%0010000, D5
-
+     BEQ ARDP           ;Go to post increment
+     CMP #%00100000, D5
+     BEQ ARD             ;Go to address register decrement
+     
 DRD: JSR DATA_REGISTER_DIRECT   
       BRA FINISH                       
 ARI: JSR ADDRESS_REGISTER_INDIRECT   ;D4 has REGISTER NUMBER
      BRA FINISH
-ARDP: JSR ADDRESS_REGISTER_DIRECT_POST      ;Address register direct post increment
+ARDP: JSR ADDRESS_REGISTER_INCREMENT     ;Address register direct post increment
+      BRA FINISH
+ARD:  JSR ADDRESS_REGISTER_DECREMENT          ;Address regiser decrement      
       BRA FINISH
 ABSOLUTE_ADD: JSR ABSOLUTE_ADDRESS
       BRA FINISH
@@ -206,7 +209,7 @@ ADDRESS_REGISTER_INDIRECT:
         MOVE.B  #')',(A2)+   ;D4 has value
         RTS
 
-ADDRESS_REGISTER_DIRECT_POST:
+ADDRESS_REGISTER_INCREMENT:
          MOVE.B  #'(',(A2)+   ;D4 has value
         MOVE.B  #'A',(A2)+   ;D4 has value
         ANDI.B #%00000111, D4  
@@ -216,14 +219,14 @@ ADDRESS_REGISTER_DIRECT_POST:
         MOVE.B  #'+',(A2)+
         RTS
 
-ADDRESS_REGISTER_DIRECT_PRE:
+ADDRESS_REGISTER_DECREMENT:
+        MOVE.B  #'-',(A2)+
         MOVE.B  #'(',(A2)+   ;D4 has value
         MOVE.B  #'A',(A2)+   ;D4 has value
         ANDI.B #%00000111, D4  
         ADD.B #48, D4
         MOVE.B  D4,(A2)+
         MOVE.B  #')',(A2)+   ;D4 has value
-        MOVE.B  #'-',(A2)+
         RTS
 
 ABSOLUTE_ADDRESS:
