@@ -92,50 +92,55 @@ DONE:
 
      CLR D5
      MOVE.B D4,D5
-     ANDI.B #%00111000,D5
-     CMP #%00010000, D5
-     BEQ ARI               ;ADDRESS REGISTER INDIRECT
-     CMP #%00000000, D5
-     BEQ DRD           ;Data register direct
-     CMP #%00011000, D5
-     BEQ ARDP           ;Go to post increment
-     CMP #%00100000, D5
-     BEQ ARD             ;Go to address register decrement
-     CMP #%00111000, D5
-     BEQ ABSOLUTE_ADD      ;Go to absolute addressing
-      
-DRD: JSR DATA_REGISTER_DIRECT   
-      BRA FINISH                       
-ARI: JSR ADDRESS_REGISTER_INDIRECT   ;D4 has REGISTER NUMBER
-     BRA FINISH
-ARDP: JSR ADDRESS_REGISTER_INCREMENT     ;Address register direct post increment
-      BRA FINISH
-ARD:  JSR ADDRESS_REGISTER_DECREMENT          ;Address regiser decrement      
-      BRA FINISH
-ABSOLUTE_ADD: JSR ABSOLUTE_ADDRESS
-      BRA FINISH
-FINISH
-     MOVE.B #0, (A2)+         ;ADD NULL TERMINATER
-     MOVE.B  #13, D0         ; PRINT BUFFER
-     LEA     buffer, A1
-     TRAP    #15
-
+     JSR EFFECTIVE_ADDRESS_0_2
+     BRA PRINT                       
         ;JMP     END
 code0001: ;MOVEA and MOVE
-
- 
+     
+  
 
         JMP     END
 code0010:
         JMP     END
-code0011:
+code0011:                     ;MOVEA AND MOVE
         
-            ;CHECK BITS 8-6 to see if INSTRUCTION IS MOVEA
-
-
-
-
-
+     MOVE.B D0,D3         ;
+     MOVE.B D0, D4        ;For effective address
+     MOVE.B D0, D5
+     MOVE.W D0, D6
+     ANDI.W #%0000000111000000,D3
+     CMP.W  #%0000000001000000,D3       ;CHECK IF IT IS MOVEA
+     BEQ MOVEA      
+     BRA MOVE     
+MOVEA:
+     MOVE.B  #'M',(A2)+
+     MOVE.B  #'O',(A2)+
+     MOVE.B  #'V',(A2)+
+     MOVE.B  #'E',(A2)+
+     MOVE.B  #'A',(A2)+
+     MOVE.B  #'.',(A2)+
+     MOVE.B  #'W',(A2)+
+     MOVE.B  #$9,(A2)+
+     JSR EFFECTIVE_ADDRESS_0_2
+     MOVE.B  #',',(A2)+
+     MOVE.W D6, D4
+     MOVE.W D6, D5
+     JSR ADDRESS_REGISTER_DIRECT2       ;WE KNOW DESTINATION IS ADDRESS REGISTER
+     BRA DONE2
+MOVE: ;CHECK BITS 8-6 to see if INSTRUCTION IS MOVEA
+     MOVE.B  #'M',(A2)+
+     MOVE.B  #'O',(A2)+
+     MOVE.B  #'V',(A2)+
+     MOVE.B  #'E',(A2)+
+     MOVE.B  #'.',(A2)+
+     MOVE.B  #'W',(A2)+
+     MOVE.B  #$9,(A2)+
+     JSR EFFECTIVE_ADDRESS_0_2
+                                     ;DO DESTINATION  Instruction in D5 right now
+          
+     
+DONE2:
+    BRA PRINT
     JMP     END
 code0100:
     MOVEA   #FALSE, A1 
@@ -188,35 +193,50 @@ code1111:
     TRAP    #15
     JMP     END
 
-   
+EFFECTIVE_ADDRESS_0_2: ;FIRST 3 BITS EA CALCULATION
+                             
+     ANDI.B #%0000000000111000,D4                        ;;DO SOURCE IS EQUAL FOR BOTH
+     CMP #%00010000, D4
+     BEQ ADDRESS_REGISTER_INDIRECT               ;ADDRESS REGISTER INDIRECT
+     CMP #%00000000, D4
+     BEQ DATA_REGISTER_DIRECT           ;Data register direct
+     CMP #%00011000, D4
+     BEQ ADDRESS_REGISTER_INCREMENT           ;Go to post increment
+     CMP #%00100000, D4
+     BEQ ADDRESS_REGISTER_DECREMENT             ;Go to address register decrement
+     CMP #%00111000, D4
+     BEQ ABSOLUTE_ADDRESS      ;Go to absolute addressing
+     CMP #%00001000, D4
+     BEQ ADDRESS_REGISTER_DIRECT
+
 DATA_REGISTER_DIRECT:
         MOVE.B  #'D',(A2)+   ;D4 has value
-        ANDI.B #%00000111, D4  
-        ADD.B #48, D4
-        MOVE.B  D4,(A2)+
+        ANDI.B #%00000111, D5  
+        ADD.B #48, D5        ;ADD FOR ASCII
+        MOVE.B  D5,(A2)+
         RTS
 ADDRESS_REGISTER_DIRECT:
         MOVE.B  #'A',(A2)+   ;D4 has value
-        ANDI.B #%00000111, D4  
-        ADD.B #48, D4
-        MOVE.B  D4,(A2)+     ;NUmber
+        ANDI.B #%00000111, D5    ;ISOLATE REGISTER VALUE
+        ADD.B #48, D5         ;ADD FOR ASCII
+        MOVE.B  D5,(A2)+     ;NUmber
         RTS
 
 ADDRESS_REGISTER_INDIRECT:
         MOVE.B  #'(',(A2)+   ;D4 has value
         MOVE.B  #'A',(A2)+   ;D4 has value
-        ANDI.B #%00000111, D4  
-        ADD.B #48, D4
-        MOVE.B  D4,(A2)+
+        ANDI.B #%00000111, D5  ;ISOLATE REGISTER VALUE
+        ADD.B #48, D5
+        MOVE.B  D5,(A2)+
         MOVE.B  #')',(A2)+   ;D4 has value
         RTS
 
 ADDRESS_REGISTER_INCREMENT:
          MOVE.B  #'(',(A2)+   ;D4 has value
         MOVE.B  #'A',(A2)+   ;D4 has value
-        ANDI.B #%00000111, D4  
-        ADD.B #48, D4
-        MOVE.B  D4,(A2)+
+        ANDI.B #%00000111, D5  
+        ADD.B #48, D5
+        MOVE.B  D5,(A2)+
         MOVE.B  #')',(A2)+   ;D4 has value
         MOVE.B  #'+',(A2)+
         RTS
@@ -225,18 +245,18 @@ ADDRESS_REGISTER_DECREMENT:
         MOVE.B  #'-',(A2)+
         MOVE.B  #'(',(A2)+   ;D4 has value
         MOVE.B  #'A',(A2)+   ;D4 has value
-        ANDI.B #%00000111, D4  
-        ADD.B #48, D4
-        MOVE.B  D4,(A2)+
+        ANDI.B #%00000111, D5  
+        ADD.B #48, D5
+        MOVE.B  D5,(A2)+
         MOVE.B  #')',(A2)+   ;D4 has value
         RTS
 
 ABSOLUTE_ADDRESS:
         MOVE.B  #'$',(A2)+
-        ANDI.B #%00000111, D4
-        CMP.B #%00000000, D4    ;ABSOLUTE ADDRESS IS WORD LENGTH
+        ANDI.B #%00000111, D5
+        CMP.B #%00000000, D5    ;ABSOLUTE ADDRESS IS WORD LENGTH
         BEQ WORD_LENGTH
-        CMP.B #%00000001, D4
+        CMP.B #%00000001, D5
         BEQ LONG_LENGTH
 WORD_LENGTH:        
         MOVE.B #2,D1
@@ -246,6 +266,87 @@ LONG_LENGTH:
         MOVE.B #4,D1
         JSR ITOA
         RTS
+
+EFFECTIVE_ADDRESS_6_8                                  ;BITS 6-8
+     ANDI.L #%0000000000111000000,D4                        ;;DO SOURCE IS EQUAL FOR BOTH
+     CMP #%010000000, D4
+     BEQ ADDRESS_REGISTER_INDIRECT2               ;ADDRESS REGISTER INDIRECT
+     CMP #%000000000, D4
+     BEQ DATA_REGISTER_DIRECT2           ;Data register direct
+     CMP #%011000000, D4
+     BEQ ADDRESS_REGISTER_INCREMENT2           ;Go to post increment
+     CMP #%100000000, D4
+     BEQ ADDRESS_REGISTER_DECREMENT2             ;Go to address register decrement
+     CMP #%111000000, D4
+     BEQ ABSOLUTE_ADDRESS2      ;Go to absolute addressing
+     CMP #%001000000, D4
+     BEQ ADDRESS_REGISTER_DIRECT2
+        
+DATA_REGISTER_DIRECT2:
+        MOVE.B  #'D',(A2)+   ;D5 has value
+        ANDI.W #%111000000000, D5  ;ISOLATE REGISTER 
+        DIVU.W #512, D5      ;DIVIDE BY 512 TO GET IT SO THOSE THREE BITS ARE LEAST SIGNIFICANT BITS
+        ADD.B #48, D5
+        MOVE.B  D5,(A2)+
+        RTS
+ADDRESS_REGISTER_DIRECT2:
+        MOVE.B  #'A',(A2)+   ;D4 has value
+        ANDI.W #%111000000000, D5  
+        DIVU.W #512, D5 
+        ADD.B #48, D5
+        MOVE.B  D5,(A2)+     ;NUmber
+        RTS
+
+ADDRESS_REGISTER_INDIRECT2:
+        MOVE.B  #'(',(A2)+   ;D4 has value
+        MOVE.B  #'A',(A2)+   ;D4 has value
+        ANDI.W #%111000000000, D5 
+        DIVU.W #512, D5 
+        ADD.B #48, D5
+        MOVE.B  D5,(A2)+
+        MOVE.B  #')',(A2)+   ;D4 has value
+        RTS
+
+ADDRESS_REGISTER_INCREMENT2:
+         MOVE.B  #'(',(A2)+   ;D4 has value
+        MOVE.B  #'A',(A2)+   ;D4 has value
+        ANDI.W #%111000000000, D5  
+        DIVU.W #512, D5 
+        ADD.B #48, D5
+        MOVE.B  D5,(A2)+
+        MOVE.B  #')',(A2)+   ;D4 has value
+        MOVE.B  #'+',(A2)+
+        RTS
+
+ADDRESS_REGISTER_DECREMENT2:
+        MOVE.B  #'-',(A2)+
+        MOVE.B  #'(',(A2)+   ;D4 has value
+        MOVE.B  #'A',(A2)+   ;D4 has value
+        ANDI.W #%111000000000, D5  
+        DIVU.W #512, D5 
+        ADD.B #48, D5
+        MOVE.B  D5,(A2)+
+        MOVE.B  #')',(A2)+   ;D4 has value
+        RTS
+
+ABSOLUTE_ADDRESS2:
+        MOVE.B  #'$',(A2)+
+        ANDI.W #%111000000000, D5
+         CMP #%000000000000, D5    ;ABSOLUTE ADDRESS IS WORD LENGTH
+        BEQ WORD_LENGTH2
+         CMP #%001000000000, D5 
+        BEQ LONG_LENGTH2
+WORD_LENGTH2:        
+        MOVE.B #2,D1
+        JSR ITOA
+        RTS
+LONG_LENGTH2:
+        MOVE.B #4,D1
+        JSR ITOA
+        RTS
+
+        
+        
 ITOA:
     
 LOOPFORASCII: 
@@ -283,6 +384,11 @@ NEXT2:
      BNE LOOPFORASCII
      RTS
 
+PRINT:
+     MOVE.B #0, (A2)+         ;ADD NULL TERMINATER
+     MOVE.B  #13, D0         ; PRINT BUFFER
+     LEA     buffer, A1
+     TRAP    #15
 
  
 TRUE: DC.B    'True',0 ;64 bytes
@@ -302,6 +408,7 @@ END:
 
     END    START        ; last line of source
     
+
 
 
 
