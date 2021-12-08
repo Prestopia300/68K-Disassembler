@@ -92,11 +92,25 @@ DONE:
 
      CLR D5
      MOVE.B D4,D5
-     JSR EFFECTIVE_ADDRESS_0_2
+     JSR EFFECTIVE_ADDRESS_3_5
      BRA PRINT                       
         ;JMP     END
 code0001: ;MOVEA and MOVE
-     
+     MOVE.B  #'M',(A2)+
+     MOVE.B  #'O',(A2)+
+     MOVE.B  #'V',(A2)+
+     MOVE.B  #'E',(A2)+
+     MOVE.B  #'.',(A2)+
+     MOVE.B  #'B',(A2)+
+     MOVE.B  #$9,(A2)+
+     MOVE.W D0, D5
+     MOVE.W D0, D4
+     JSR EFFECTIVE_ADDRESS_3_5
+     MOVE.W D0, D5
+     MOVE.W D0, D4
+     MOVE.B  #',',(A2)+
+     JSR EFFECTIVE_ADDRESS_6_8
+     BRA PRINT    
   
 
         JMP     END
@@ -121,7 +135,7 @@ MOVEA:
      MOVE.B  #'.',(A2)+
      MOVE.B  #'W',(A2)+
      MOVE.B  #$9,(A2)+
-     JSR EFFECTIVE_ADDRESS_0_2
+     JSR EFFECTIVE_ADDRESS_3_5
      MOVE.B  #',',(A2)+
      MOVE.W D6, D4
      MOVE.W D6, D5
@@ -135,8 +149,10 @@ MOVE: ;CHECK BITS 8-6 to see if INSTRUCTION IS MOVEA
      MOVE.B  #'.',(A2)+
      MOVE.B  #'W',(A2)+
      MOVE.B  #$9,(A2)+
-     JSR EFFECTIVE_ADDRESS_0_2
-                                     ;DO DESTINATION  Instruction in D5 right now
+     JSR EFFECTIVE_ADDRESS_3_5
+     MOVE.B  #',',(A2)+
+     JSR EFFECTIVE_ADDRESS_6_8
+     BRA DONE2                                ;DO DESTINATION  Instruction in D5 right now
           
      
 DONE2:
@@ -193,9 +209,9 @@ code1111:
     TRAP    #15
     JMP     END
 
-EFFECTIVE_ADDRESS_0_2: ;FIRST 3 BITS EA CALCULATION
+EFFECTIVE_ADDRESS_3_5: ;BITS 3-5 EA CALCULATION
                              
-     ANDI.B #%0000000000111000,D4                        ;;DO SOURCE IS EQUAL FOR BOTH
+     ANDI.W #%0000000000111000,D4                        ;;DO SOURCE IS EQUAL FOR BOTH
      CMP #%00010000, D4
      BEQ ADDRESS_REGISTER_INDIRECT               ;ADDRESS REGISTER INDIRECT
      CMP #%00000000, D4
@@ -253,7 +269,7 @@ ADDRESS_REGISTER_DECREMENT:
 
 ABSOLUTE_ADDRESS:
         MOVE.B  #'$',(A2)+
-        ANDI.B #%00000111, D5
+        ANDI.W #%00000111, D5
         CMP.B #%00000000, D5    ;ABSOLUTE ADDRESS IS WORD LENGTH
         BEQ WORD_LENGTH
         CMP.B #%00000001, D5
@@ -267,7 +283,7 @@ LONG_LENGTH:
         JSR ITOA
         RTS
 
-EFFECTIVE_ADDRESS_6_8                                  ;BITS 6-8
+EFFECTIVE_ADDRESS_6_8:                                  ;BITS 6-8
      ANDI.L #%0000000000111000000,D4                        ;;DO SOURCE IS EQUAL FOR BOTH
      CMP #%010000000, D4
      BEQ ADDRESS_REGISTER_INDIRECT2               ;ADDRESS REGISTER INDIRECT
@@ -408,6 +424,7 @@ END:
 
     END    START        ; last line of source
     
+
 
 
 
