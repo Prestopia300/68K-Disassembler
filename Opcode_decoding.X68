@@ -17,7 +17,7 @@ START:                  ; first instruction of program
     
     ; NOTE TO SELF : Focus testing on getting A5 to a certain number, say 1010, which should be A000, or A00 (because 3*4)
     
-    MOVEA.L #$0400, A5 
+    MOVEA.L #$0408, A5 
     LEA     buffer, A2          
     ; load the next instruction and jump to the opcode table entry
     LEA     OP_TABLE, A0
@@ -199,10 +199,190 @@ MOVE2: ;CHECK BITS 8-6 to see if INSTRUCTION IS MOVEA
 DONE2:
     BRA PRINT
     JMP     END
-code0100:
-    MOVEA   #FALSE, A1 
-    TRAP    #15
-    JMP     END
+code0100: ; MOVEM, NOP, LEA
+    MOVE.W D0,D3 ; D3 used for bits 9-7
+     MOVE.W D0,D4 ; D4 used for bits 8-6
+     MOVE.W D0,D5 ; D5 used for effective addressing
+     ANDI.W #%0000001110000000, D3    ; bits 7-9 0000 0011 1000 0000 = #$0380
+     ANDI.W #%0000000111000000, D4    ; bits 6-8 0000 0001 1100 0000 = #$01C0
+
+     CMP.W #$0200,D3      ; bits 9-7 = 100 :  0000 0010 0000 0000 = #$0200
+     BEQ NOP      
+     CMP.W #$0080,D3      ; bits 9-7 = 001 :  0000 0000 1000 0000 = #$0080
+     BEQ MOVEM
+     CMP.W #$01C0,D4      ; bits 8-6 = 111 :  0000 0001 1100 0000 = #$01C0
+     BEQ LEA
+NOP:
+    MOVE.B  #'N',(A2)+            ;ADD INSTRUCT NAME TO BUFFER
+    MOVE.B  #'O',(A2)+
+    MOVE.B  #'P',(A2)+
+    BRA PRINT
+LEA:
+    MOVE.B  #'L',(A2)+            ;ADD INSTRUCT NAME TO BUFFER
+    MOVE.B  #'E',(A2)+
+    MOVE.B  #'A',(A2)+
+    BRA PRINT
+MOVEM:    
+    MOVE.B  #'M',(A2)+            ;ADD INSTRUCT NAME TO BUFFER
+    MOVE.B  #'O',(A2)+
+    MOVE.B  #'V',(A2)+
+    MOVE.B  #'E',(A2)+
+    MOVE.B  #'M',(A2)+
+    MOVE.B  #'.',(A2)+
+
+    CLR D3                        ;If statements to check if word or long
+    CLR D4
+    MOVE.B D0,D3
+    ANDI.B #%01000000, D3                         
+    CMP.B #$00,D3       
+    BEQ WORD_SIMPLE
+    CMP.B #$40,D3
+    BEQ LONG_SIMPLE
+    
+WORD_SIMPLE:
+    MOVE.B  #'W',(A2)+
+    BRA MOVEM_DONE
+LONG_SIMPLE:
+    MOVE.B  #'L',(A2)+
+    MOVE.B (A5)+,D5 ;CLEAR ZEROS
+    CLR D5
+    BRA MOVEM_DONE
+MOVEM_DONE:
+     MOVE.B  #$9,(A2)+
+     CLR D3
+     CLR D4
+     
+    MOVE.W D5, D3 ; D3 used to check dr
+    ANDI.W #%0000010000000000, D3 ; 0000 0100 0000 0000 = #$0400
+    CMP.W #$0000,D3 
+    BEQ REGISTER_TO_MEMORY
+    CMP.W #$0400,D3
+    BEQ MEMORY_TO_REGISTER 
+
+REGISTER_TO_MEMORY: 
+    MOVE.B  #$9,(A2)+ ; space
+    
+    CLR D4
+    MOVE.B D0, D4 ; mode
+    ANDI.B #%00111000, D4
+    
+    ;REGISTER
+    MOVE.W (A5)+, D1 ; D1 : register opcode   
+    JSR ADD_REGISTER ; must know mode (in D4)
+    MOVE.B  #',',(A2)+
+    
+    CLR D5
+    MOVE.B D0, D5 ; register
+    ANDI.B #%00000111, D5
+    
+    ;MEMORY
+    JSR EFFECTIVE_ADDRESS_3_5    
+    JMP PRINT
+
+MEMORY_TO_REGISTER:
+    MOVE.B  #$9,(A2)+ ; space
+    ;MEMORY
+    CLR D3
+    CLR D4
+    MOVE.B D0, D4 ; mode
+    ANDI.B #%00111000, D4
+    
+    MOVE.B D0, D3 ; register
+    ANDI.B #%00000111, D3
+    
+    MOVE.B D3, D5 ; D5 is register
+    JSR EFFECTIVE_ADDRESS_3_5
+    
+    MOVE.B  #',',(A2)+
+    MOVE.W (A5)+, D1 ; D3 used for register index
+    
+    ;REGISTER
+    JSR ADD_REGISTER
+    JMP PRINT
+
+;---add register start
+ADD_REGISTER:
+    MOVE.W #0, D2 ; D2 : index num, used to find register num
+    MOVE.W D1,D6 ; Check first index
+    ANDI.W #$0000000000000001, D6
+    CMP #%0000000000000001, D6
+    BEQ ADD_THE_FOUND_REGISTER
+             
+LOOPFORREGISTER:     
+    LSR.W   #1, D1 ; shift right               
+    ADD.B #1, D2 ; index +1
+    CLR D6
+    MOVE.W D1,D6 ; isolate least sig. bit
+    ANDI.W #$0000000000000001, D6
+    
+    CMP #16, D2 ; stop loop if index > 15
+    BEQ ADD_REGISTER_END 
+    
+    CMP #%0000000000000001, D6
+    BEQ ADD_THE_FOUND_REGISTER
+    BNE LOOPFORREGISTER
+
+ADD_THE_FOUND_REGISTER
+    JSR CHECK_IF_PREDEC   
+    
+    ANDI.W #%1111111111111110, D1 ; Handles Slashes
+    CMP #$0000, D1
+    BEQ CHECK_IF_CONTINUE_LOOP
+    BNE CHECK_IF_CONTINUE_LOOP_SLASH
+CHECK_IF_CONTINUE_LOOP:
+    CMP #16, D2
+    BNE LOOPFORREGISTER
+    BEQ ADD_REGISTER_END
+CHECK_IF_CONTINUE_LOOP_SLASH
+    MOVE.B  #'/',(A2)+
+    CMP #16, D2
+    BNE LOOPFORREGISTER
+    BEQ ADD_REGISTER_END
+    
+CHECK_IF_PREDEC:
+    CMP #%00100000, D4 ; if (mode 100)
+    BEQ LOOPFORREGISTER_END_PREDECRIMENT
+    CMP #%00100000, D4      
+    BNE LOOPFORREGISTER_END
+LOOPFORREGISTER_END:
+    CMP #$0007, D2
+    BLE DATA_REGISTER_DIRECT
+    BGT ADD_ADDRESS_REGISTER
+ADD_DATA_REGISTER:
+    JSR DATA_REGISTER_DIRECT    
+    RTS
+ADD_ADDRESS_REGISTER:
+    MOVE.W D2, D5
+    SUB.B #7, D5
+    JSR ADDRESS_REGISTER_DIRECT
+    RTS
+
+LOOPFORREGISTER_END_PREDECRIMENT:
+    CLR D3
+    CLR D5
+    MOVE.W D2, D3 ; D3 : register index
+    CMP #$0007, D2
+    BLE ADD_ADDRESS_REGISTER_DIR
+    BGT ADD_DATA_REGISTER_DIR
+ADD_ADDRESS_REGISTER_DIR
+    MOVE.B #7, D5 ; D5 = 7-D3
+    SUB.B  D3, D5 
+    JSR ADDRESS_REGISTER_DIRECT  
+    RTS 
+ADD_DATA_REGISTER_DIR:
+    MOVE.W D2, D5 ; D5 -= (D3-8)*2
+    SUB.B #8, D3  
+    MULU  #2, D3
+    ADD.B #1, D3
+    SUB.B D3, D5
+    JSR DATA_REGISTER_DIRECT
+    RTS
+    
+ADD_REGISTER_END:
+    RTS
+;---add register finish
+
+
 code0101:
     MOVEA   #FALSE, A1 
     TRAP    #15
@@ -509,6 +689,7 @@ END:
 
     END    START        ; last line of source
     
+
 
 
 
