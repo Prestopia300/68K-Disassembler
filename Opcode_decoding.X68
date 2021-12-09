@@ -67,7 +67,7 @@ code0000:
 BYTE:                     ;ADD ASCII VALUES TO BUFFER
      MOVE.B  #'B',(A2)+
      MOVE.B #1,D1
-     MOVE.B (A5)+,D5       ;CLEAR ZEROS
+     MOVE.B (A5)+,D7       ;CLEAR ZEROS
      CLR D5
      BRA DONE             ;after adding size character go to routine to add immediate data (CONVERT HEX TO ASCII)
 WORD:
@@ -96,6 +96,7 @@ DONE:
      BRA PRINT                       
         ;JMP     END
 code0001: ;MOVEA and MOVE
+     MOVE #1,D1                 ;IN CASE OF IMMEDIATE DATA 
      MOVE.B  #'M',(A2)+
      MOVE.B  #'O',(A2)+
      MOVE.B  #'V',(A2)+
@@ -115,9 +116,7 @@ code0001: ;MOVEA and MOVE
 
         JMP     END
 code0010:
-        JMP     END
-code0011:                     ;MOVEA AND MOVE
-        
+     MOVE.B #3,D1                 ;IN CASE OF IMMEDIATE DATA
      MOVE.B D0,D3         ;
      MOVE.B D0, D4        ;For effective address
      MOVE.B D0, D5
@@ -133,7 +132,7 @@ MOVEA:
      MOVE.B  #'E',(A2)+
      MOVE.B  #'A',(A2)+
      MOVE.B  #'.',(A2)+
-     MOVE.B  #'W',(A2)+
+     MOVE.B  #'L',(A2)+
      MOVE.B  #$9,(A2)+
      JSR EFFECTIVE_ADDRESS_3_5
      MOVE.B  #',',(A2)+
@@ -142,6 +141,48 @@ MOVEA:
      JSR ADDRESS_REGISTER_DIRECT2       ;WE KNOW DESTINATION IS ADDRESS REGISTER
      BRA DONE2
 MOVE: ;CHECK BITS 8-6 to see if INSTRUCTION IS MOVEA
+     MOVE.B  #'M',(A2)+
+     MOVE.B  #'O',(A2)+
+     MOVE.B  #'V',(A2)+
+     MOVE.B  #'E',(A2)+
+     MOVE.B  #'.',(A2)+
+     MOVE.B  #'L',(A2)+
+     MOVE.B  #$9,(A2)+
+     JSR EFFECTIVE_ADDRESS_3_5
+     MOVE.B  #',',(A2)+
+     JSR EFFECTIVE_ADDRESS_6_8
+     BRA DONE2                                ;DO DESTINATION  Instruction in D5 right now
+        
+
+
+
+       JMP     END
+code0011:                     ;MOVEA AND MOVE
+     MOVE #2,D1                 ;IN CASE OF IMMEDIATE DATA   
+     MOVE.B D0,D3         ;
+     MOVE.B D0, D4        ;For effective address
+     MOVE.B D0, D5
+     MOVE.W D0, D6
+     ANDI.W #%0000000111000000,D3
+     CMP.W  #%0000000001000000,D3       ;CHECK IF IT IS MOVEA
+     BEQ MOVEA2      
+     BRA MOVE2     
+MOVEA2:
+     MOVE.B  #'M',(A2)+
+     MOVE.B  #'O',(A2)+
+     MOVE.B  #'V',(A2)+
+     MOVE.B  #'E',(A2)+
+     MOVE.B  #'A',(A2)+
+     MOVE.B  #'.',(A2)+
+     MOVE.B  #'W',(A2)+
+     MOVE.B  #$9,(A2)+
+     JSR EFFECTIVE_ADDRESS_3_5
+     MOVE.B  #',',(A2)+
+     MOVE.W D6, D4
+     MOVE.W D6, D5
+     JSR ADDRESS_REGISTER_DIRECT2       ;WE KNOW DESTINATION IS ADDRESS REGISTER
+     BRA DONE2
+MOVE2: ;CHECK BITS 8-6 to see if INSTRUCTION IS MOVEA
      MOVE.B  #'M',(A2)+
      MOVE.B  #'O',(A2)+
      MOVE.B  #'V',(A2)+
@@ -221,7 +262,7 @@ EFFECTIVE_ADDRESS_3_5: ;BITS 3-5 EA CALCULATION
      CMP #%00100000, D4
      BEQ ADDRESS_REGISTER_DECREMENT             ;Go to address register decrement
      CMP #%00111000, D4
-     BEQ ABSOLUTE_ADDRESS      ;Go to absolute addressing
+     BEQ ABSOLUTE_ADDRESS_OR_IMMED_DATA      ;Go to absolute addressing
      CMP #%00001000, D4
      BEQ ADDRESS_REGISTER_DIRECT
 
@@ -267,9 +308,32 @@ ADDRESS_REGISTER_DECREMENT:
         MOVE.B  #')',(A2)+   ;D4 has value
         RTS
 
-ABSOLUTE_ADDRESS:
-        MOVE.B  #'$',(A2)+
+ABSOLUTE_ADDRESS_OR_IMMED_DATA:
         ANDI.W #%00000111, D5
+        CMP.B  #%00000100, D5 ;IF IMMEDIATE DATA
+        BEQ IMMEDIATE_DATA
+        BRA ADDRESS
+IMMEDIATE_DATA:         
+        MOVE.B  #'#',(A2)+
+        MOVE.B  #'$',(A2)+
+        CMP #1,D1
+        BEQ REMOVE1
+        CMP #3, D1
+        BEQ REMOVE2
+        BRA FIXED    ;BRANCH TO FIXED IF WORD
+REMOVE1:              ;BYTE
+       MOVE.B (A5)+,D7  ;REMOVE ZEROS
+       BRA FIXED
+REMOVE2:
+       MOVE.B (A5)+,D7
+       BRA FIXED
+FIXED:        
+
+        JSR ITOA
+        MOVE.W D6, D5
+        RTS
+ADDRESS:       
+        MOVE.B  #'$',(A2)+       ;IS ADDRESS
         CMP.B #%00000000, D5    ;ABSOLUTE ADDRESS IS WORD LENGTH
         BEQ WORD_LENGTH
         CMP.B #%00000001, D5
@@ -294,7 +358,7 @@ EFFECTIVE_ADDRESS_6_8:                                  ;BITS 6-8
      CMP #%100000000, D4
      BEQ ADDRESS_REGISTER_DECREMENT2             ;Go to address register decrement
      CMP #%111000000, D4
-     BEQ ABSOLUTE_ADDRESS2      ;Go to absolute addressing
+     BEQ ABSOLUTE_ADDRESS_OR_IMMED_DATA2      ;Go to absolute addressing
      CMP #%001000000, D4
      BEQ ADDRESS_REGISTER_DIRECT2
         
@@ -345,10 +409,31 @@ ADDRESS_REGISTER_DECREMENT2:
         MOVE.B  #')',(A2)+   ;D4 has value
         RTS
 
-ABSOLUTE_ADDRESS2:
-        MOVE.B  #'$',(A2)+
+ABSOLUTE_ADDRESS_OR_IMMED_DATA2:        MOVE.B  #'$',(A2)+
         ANDI.W #%111000000000, D5
-         CMP #%000000000000, D5    ;ABSOLUTE ADDRESS IS WORD LENGTH
+        CMP    #%001000000000, D5
+        BEQ IMMEDIATE_DATA2
+        BRA ADDRESS2
+IMMEDIATE_DATA2:
+        MOVE.B  #'#',(A2)+
+        MOVE.B  #'$',(A2)+
+        CMP #1,D1       ;REMOVE ZEROS
+        BEQ REMOVE3
+        CMP #3, D1
+        BEQ REMOVE4
+        BRA FIXED2
+REMOVE3:
+       MOVE.B (A5)+,D7
+       BRA FIXED2
+REMOVE4:
+       MOVE.B (A5)+,D7
+       BRA FIXED2
+FIXED2:        
+        JSR ITOA
+        MOVE.W D6, D5
+        RTS
+ADDRESS2:        
+        CMP #%000000000000, D5    ;ABSOLUTE ADDRESS IS WORD LENGTH
         BEQ WORD_LENGTH2
          CMP #%001000000000, D5 
         BEQ LONG_LENGTH2
@@ -424,6 +509,7 @@ END:
 
     END    START        ; last line of source
     
+
 
 
 
