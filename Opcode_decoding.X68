@@ -17,7 +17,7 @@ START:                  ; first instruction of program
     
     ; NOTE TO SELF : Focus testing on getting A5 to a certain number, say 1010, which should be A000, or A00 (because 3*4)
     
-    MOVEA.L #$0408, A5 
+    MOVEA.L #$0400, A5 
     LEA     buffer, A2          
     ; load the next instruction and jump to the opcode table entry
     LEA     OP_TABLE, A0
@@ -199,7 +199,8 @@ MOVE2: ;CHECK BITS 8-6 to see if INSTRUCTION IS MOVEA
 DONE2:
     BRA PRINT
     JMP     END
-code0100: ; MOVEM, NOP, LEA
+code0100:
+    ; MOVEM, NOP, LEA
     MOVE.W D0,D3 ; D3 used for bits 9-7
      MOVE.W D0,D4 ; D4 used for bits 8-6
      MOVE.W D0,D5 ; D5 used for effective addressing
@@ -241,11 +242,11 @@ MOVEM:
     
 WORD_SIMPLE:
     MOVE.B  #'W',(A2)+
+    ;MOVE.B #2,D1        
     BRA MOVEM_DONE
 LONG_SIMPLE:
     MOVE.B  #'L',(A2)+
-    MOVE.B (A5)+,D5 ;CLEAR ZEROS
-    CLR D5
+    ;MOVE.B #3,D1        
     BRA MOVEM_DONE
 MOVEM_DONE:
      MOVE.B  #$9,(A2)+
@@ -290,12 +291,28 @@ MEMORY_TO_REGISTER:
     MOVE.B D0, D3 ; register
     ANDI.B #%00000111, D3
     
+    CMP #%00111000, D4
+    BEQ ADDRESS_TO_REGISTER
+    
     MOVE.B D3, D5 ; D5 is register
     JSR EFFECTIVE_ADDRESS_3_5
     
     MOVE.B  #',',(A2)+
     MOVE.W (A5)+, D1 ; D3 used for register index
     
+    ;REGISTER
+    JSR ADD_REGISTER
+    JMP PRINT
+    
+ADDRESS_TO_REGISTER: ; special case for mode 111
+    MOVE.W (A5)+, D6 ; pop here (D1 used in ITOA and ADDRESS. temporarally use )
+     
+    MOVE.B D3, D5 ; D5 is register
+    JSR EFFECTIVE_ADDRESS_3_5
+    
+    MOVE.B  #',',(A2)+
+    MOVE.W D6, D1 ; no pop here, instead move register from temp D6 to D1
+    CLR D6    
     ;REGISTER
     JSR ADD_REGISTER
     JMP PRINT
@@ -345,6 +362,7 @@ CHECK_IF_PREDEC:
     CMP #%00100000, D4      
     BNE LOOPFORREGISTER_END
 LOOPFORREGISTER_END:
+    MOVE.W D2, D5
     CMP #$0007, D2
     BLE DATA_REGISTER_DIRECT
     BGT ADD_ADDRESS_REGISTER
@@ -352,8 +370,7 @@ ADD_DATA_REGISTER:
     JSR DATA_REGISTER_DIRECT    
     RTS
 ADD_ADDRESS_REGISTER:
-    MOVE.W D2, D5
-    SUB.B #7, D5
+    SUB.B #8, D5
     JSR ADDRESS_REGISTER_DIRECT
     RTS
 
@@ -382,47 +399,574 @@ ADD_REGISTER_END:
     RTS
 ;---add register finish
 
-
 code0101:
-    MOVEA   #FALSE, A1 
-    TRAP    #15
-    JMP     END
+    MOVE.B  #'A',(A2)+            ;ADD INSTRUCT NAME TO BUFFER   ;ADDQ             ADDQ
+    MOVE.B  #'D',(A2)+
+    MOVE.B  #'D',(A2)+
+    MOVE.B  #'Q',(A2)+
+    MOVE.B  #'.',(A2)+
+                ;ISOLATE TWO BITS USING AND
+     MOVE.B D0,D3
+     MOVE.B D0, D4        ;For effective address
+     ANDI.B #%11000000, D3
+     CMP.B #$00,D3       ;If statements to check if byte or word or long
+     BEQ BYTE_ADDQ      
+     CMP.B #$40,D3
+     BEQ WORD_ADDQ
+     CMP.B #$80,D3
+     BEQ LONG_ADDQ
+    
+BYTE_ADDQ:                     ;ADD ASCII VALUES TO BUFFER
+     MOVE.B  #'B',(A2)+
+     MOVE.B #1,D1
+     MOVE.B (A5)+,D7       ;CLEAR ZEROS
+     CLR D5
+     BRA NEXT_ADDQ             ;after adding size character go to routine to add immediate data (CONVERT HEX TO ASCII)
+WORD_ADDQ:
+     MOVE.B  #'W',(A2)+
+     MOVE.B #2,D1        ;Make loop counter 2 for the the 4 HEX VALUES that make up 16 bits, 4 bytes
+     BRA NEXT_ADDQ
+LONG_ADDQ:
+     MOVE.B  #'L',(A2)+
+     MOVE.B #3,D1          ;COUNTER
+     MOVE.B (A5)+,D5       ;CLEAR ZEROS
+     CLR D5
+    
+NEXT_ADDQ:
+     MOVE.B  #$9,(A2)+
+     MOVE.B  #'#',(A2)+
+     MOVE.B  #'%',(A2)+
+     CLR D3
+     
+     MOVE.W D0, D2
+     MOVE.B #3 , D3                ;COUNTER
+     ANDI.W #%0000111000000000, D2 ;ISOLATE DATA
+     ROR.W #8, D2
+     ROR.W #1, D2
+
+LOOP_ADDQ:
+     ROR.W #1 ,D2
+     BCC ZERO
+     BRA ONE
+ZERO:
+    MOVE.B  #'0',(A2)+
+    SUBQ #1,D3
+    BNE LOOP_ADDQ
+     BRA EA_ADDQ
+ONE:
+    MOVE.B #'1',(A2)+ 
+    SUBQ #1,D3
+    BNE LOOP_ADDQ
+    BRA EA_ADDQ
+EA_ADDQ: 
+     MOVE.B  #$9,(A2)+
+     MOVE.B  #',',(A2)+
+
+     CLR D5
+     MOVE.B D4,D5
+     JSR EFFECTIVE_ADDRESS_3_5
+     BRA PRINT       
 code0110:
-    MOVEA   #FALSE, A1 ;TRUE
-    TRAP    #15
-    JMP     END
-code0111:
-    MOVEA   #FALSE, A1 
-    TRAP    #15
-    JMP     END
+    MOVE.W D0,D1
+    ANDI.W #%1111110000000000, D1
+    CMP    #%0110000100000000, D1
+    BEQ BSR_CODE
+    BRA BRA_CODE
+BSR_CODE:
+   MOVE.B  #'B',(A2)+
+   MOVE.B  #'S',(A2)+
+   MOVE.B  #'R',(A2)+
+   BRA GET_TWOS_COMP
+BRA_CODE:  
+   MOVE.B  #'B',(A2)+
+   MOVE.B  #'A',(A2)+
+   MOVE.B  #'R',(A2)+
+
+GET_TWOS_COMP:
+   MOVE.B  #32,(A2)+
+   
+   ANDI.W #%0000000011111111 ,D0
+   CMP    #%0000000000000000 ,D0
+   BEQ    WORD_DISPLACE
+   
+   
+   BRA BYTE_DISPLACE
+   
+BYTE_DISPLACE:
+   MOVE #2, D3 ;COUNTER
+   NOT.W D0                ;ONE BYTE
+   ADD.W #1,D0                 ;twos complement
+   ROR.W #4,D0
+   BRA LOOP_ASCII
+
+
+WORD_DISPLACE: 
+   MOVE #4, D3 ;COUNTER
+   MOVE.W #4,D1
+   MOVE.W (A5)+ ,D0
+   NOT.W D0                ;ONE BYTE
+   ADD.W #1,D0                 ;twos complement
+   ROR.W #8,D0
+   ROR.W #4,D0
+   BRA LOOP_ASCII
+
+  
+LOOP_ASCII
+   MOVE.W D0, D1
+   ANDI.W #$000F, D1
+   ROL.W #4, D0
+   CMP.B #10, D1
+   BLT NUM_ASCII
+   BRA HEX_ASCII
+NUM_ASCII:
+   ADD.B #48,D1
+   MOVE.B  D1,(A2)+ 
+   BRA NEXT_ASCII
+HEX_ASCII:
+   ADD.B #55,D1
+   MOVE.B  D1,(A2)+ 
+NEXT_ASCII:   
+   SUBQ.B #1, D3
+   BNE LOOP_ASCII
+   BRA PRINT   
+    
+code0111:           ;MOVEQ
+    MOVE.B  #'M',(A2)+            ;ADD INSTRUCT NAME TO BUFFER    MOVEQ        MOVEQ
+    MOVE.B  #'O',(A2)+
+    MOVE.B  #'V',(A2)+
+    MOVE.B  #'E',(A2)+
+    MOVE.B  #'Q',(A2)+
+    MOVE.B  #32,(A2)+
+    MOVE.B  #'#',(A2)+
+    MOVE.B  #'$',(A2)+
+    
+    MOVE.W D0, D5
+    MOVE #2, D3 ;COUNTER
+    ANDI.W #$00FF, D0
+    
+LOOP_ASCII_2:
+   MOVE.W D0, D1
+   ANDI.W #$00F0, D1
+   ROL.L #4, D0
+   ROR.L #4, D1
+   CMP.B #10, D1
+   BLT NUM_ASCII_2
+   BRA HEX_ASCII_2
+NUM_ASCII_2:
+   ADD.B #48,D1
+   MOVE.B  D1,(A2)+ 
+   BRA NEXT_ASCII_2
+HEX_ASCII_2:
+   ADD.B #55,D1
+   MOVE.B  D1,(A2)+ 
+NEXT_ASCII_2:   
+   SUBQ.B #1, D3
+   BNE LOOP_ASCII_2
+  
+   MOVE.B  #',',(A2)+
+   MOVE.B  #32,(A2)+
+   JSR DATA_REGISTER_DIRECT2
+   BRA PRINT
+
+
+   
 code1000:
-    MOVEA   #FALSE, A1 
-    TRAP    #15
-    JMP     END
+    ; DIVU
+    MOVE.B  #'D',(A2)+            ;ADD INSTRUCT NAME TO BUFFER
+    MOVE.B  #'I',(A2)+
+    MOVE.B  #'V',(A2)+
+    MOVE.B  #'U',(A2)+
+    MOVE.B  #$9,(A2)+ ; space
+
+    MOVE.W D0, D4 ;mode
+    MOVE.L D0, D5 ;register num
+    JSR EFFECTIVE_ADDRESS_3_5  
+    
+    MOVE.B  #',',(A2)+
+    
+    MOVE.L D0, D5 ; done again, incase mode 111 changes D5
+    LSR.W   #1, D5 ; register num
+    LSR.L   #8, D5 
+    ANDI.W #%00000111, D5
+    JSR DATA_REGISTER_DIRECT
+    
+    BRA PRINT
+
 code1001:
-    MOVEA   #FALSE, A1 
-    TRAP    #15
-    JMP     END
+    ; SUB
+    MOVE.B  #'S',(A2)+            ;ADD INSTRUCT NAME TO BUFFER
+    MOVE.B  #'U',(A2)+
+    MOVE.B  #'B',(A2)+
+    MOVE.B  #'.',(A2)+
+    
+    MOVE.W D0, D4 ;mode
+    MOVE.L D0, D5 ;register num
+    
+    MOVE.L D0, D3 ; opmode
+    LSR.L   #6, D3 
+    ANDI.W #%00000111, D3
+    
+    CMP #%00000100, D3
+    BLT DESTINATION_MINUS_SOURCE
+    BGE SOURCE_MINUS_DESTINATION
+    
+    
+DESTINATION_MINUS_SOURCE:
+    CMP #%00000000, D3
+    BEQ OP_BYTE_SUB
+    CMP #%00000001, D3
+    BEQ OP_WORD_SUB
+    CMP #%00000010, D3
+    BEQ OP_LONG_SUB
+    
+OP_BYTE_SUB:
+    MOVE.B  #'B',(A2)+
+    JMP D_M_S_END
+OP_WORD_SUB:
+    MOVE.B  #'W',(A2)+
+    JMP D_M_S_END
+OP_LONG_SUB:
+    MOVE.B  #'L',(A2)+
+    JMP D_M_S_END
+    
+D_M_S_END:
+    MOVE.B  #$9,(A2)+ ; space
+
+    JSR EFFECTIVE_ADDRESS_3_5  
+    MOVE.B  #',',(A2)+
+
+    MOVE.L D0, D5 ; register2 // done again just incase
+    LSR.W   #1, D5
+    LSR.L   #8, D5 
+    ANDI.W #%00000111, D5
+    JSR DATA_REGISTER_DIRECT
+    
+    BRA PRINT
+
+SOURCE_MINUS_DESTINATION:
+    CMP #%00000100, D3
+    BEQ OP_BYTE2_SUB
+    CMP #%00000101, D3
+    BEQ OP_WORD2_SUB
+    CMP #%00000110, D3
+    BEQ OP_LONG2_SUB
+    
+OP_BYTE2_SUB:
+    MOVE.B  #'B',(A2)+
+    JMP S_M_D_END
+OP_WORD2_SUB:
+    MOVE.B  #'W',(A2)+
+    JMP S_M_D_END
+OP_LONG2_SUB:
+    MOVE.B  #'L',(A2)+
+    JMP S_M_D_END
+
+S_M_D_END:
+    MOVE.B  #$9,(A2)+ ; space
+    MOVE.L D0, D5 ; register2 // done again just incase
+    LSR.W   #1, D5
+    LSR.L   #8, D5 
+    ANDI.W #%00000111, D5
+    JSR DATA_REGISTER_DIRECT
+
+    MOVE.B  #',',(A2)+
+
+    MOVE.L D0, D5 ;register num
+    JSR EFFECTIVE_ADDRESS_3_5  
+    
+    BRA PRINT
+
+
 code1010:
     MOVEA   #FALSE, A1 
     TRAP    #15
     JMP     END
 code1011:
-    MOVEA   #FALSE, A1 
-    TRAP    #15
-    JMP     END
-code1100:
-    MOVEA   #FALSE, A1 
-    TRAP    #15
-    JMP     END
+    ; -------------------------------------------------------------------------------------
+    MOVE.B  #'C',(A2)+            ;ADD INSTRUCT NAME TO BUFFER
+    MOVE.B  #'M',(A2)+
+    MOVE.B  #'P',(A2)+
+     
+    MOVE.B  #'.',(A2)+
+    
+    MOVE.W D0, D4 ;mode
+    MOVE.L D0, D5 ;register num
+    
+    MOVE.L D0, D3 ; opmode
+    LSR.L   #6, D3 
+    ANDI.W #%00000111, D3
+    
+    CMP #%00000000, D3 ; byte word or long
+    BEQ OP_BYTE_CMP
+    CMP #%00000001, D3 
+    BEQ OP_WORD_CMP
+    CMP #%00000010, D3
+    BEQ OP_LONG_CMP
+
+OP_BYTE_CMP:
+    MOVE.B  #'B',(A2)+
+    JMP CMP_END
+OP_WORD_CMP:
+    MOVE.B  #'W',(A2)+
+    JMP CMP_END
+OP_LONG_CMP:
+    MOVE.B  #'L',(A2)+
+    JMP CMP_END
+    
+CMP_END:
+    MOVE.B  #$9,(A2)+ ; space
+
+    JSR EFFECTIVE_ADDRESS_3_5  
+    
+    MOVE.B  #',',(A2)+
+    
+    MOVE.L D0, D5 ; register2 // done again just incase
+    LSR.W   #1, D5
+    LSR.L   #8, D5 
+    ANDI.W #%00000111, D5
+    JSR DATA_REGISTER_DIRECT
+        
+    BRA PRINT
+; ------------------------------------------------------------------------------------
+
+
+code1100:            ;MULU
+    MOVE.B  #'M',(A2)+
+    MOVE.B  #'U',(A2)+
+    MOVE.B  #'L',(A2)+
+    MOVE.B  #'U',(A2)+
+    MOVE.B  #'.',(A2)+
+    MOVE.B  #'W',(A2)+
+
+   JSR EFFECTIVE_ADDRESS_3_5
+   JSR DATA_REGISTER_DIRECT2
+   BRA PRINT
+
+
+
+
+
 code1101:
-    MOVEA   #FALSE, A1 
-    TRAP    #15
-    JMP     END
-code1110:
-    MOVEA   #FALSE, A1 
-    TRAP    #15
-    JMP     END
+    ; ADD, ADDA ; -------------------------------------------------------------------------------------
+    MOVE.L D0, D3 ; opmode
+    LSR.L   #6, D3 
+    ANDI.W #%00000111, D3
+    
+    CMP #%00000011, D3 ; if opmode - 011 or 111, do ADDA, else do ADD
+    BEQ ADDA
+    CMP #%00000111, D3
+    BEQ ADDA
+    
+    JMP ADD
+
+ADD:
+    MOVE.B  #'A',(A2)+            ;ADD INSTRUCT NAME TO BUFFER
+    MOVE.B  #'D',(A2)+
+    MOVE.B  #'D',(A2)+
+    MOVE.B  #'.',(A2)+
+    
+    MOVE.W D0, D4 ;mode
+    MOVE.L D0, D5 ;register num
+    
+    MOVE.L D0, D3 ; opmode
+    LSR.L   #6, D3 
+    ANDI.W #%00000111, D3
+    
+    CMP #%00000100, D3
+    BLT DESTINATION_PLUS_SOURCE
+    BGE SOURCE_PLUS_DESTINATION
+    
+    
+DESTINATION_PLUS_SOURCE:
+    CMP #%00000000, D3
+    BEQ OP_BYTE_ADD
+    CMP #%00000001, D3
+    BEQ OP_WORD_ADD
+    CMP #%00000010, D3
+    BEQ OP_LONG_ADD
+    
+OP_BYTE_ADD:
+    MOVE.B  #'B',(A2)+
+    JMP D_P_S_END
+OP_WORD_ADD:
+    MOVE.B  #'W',(A2)+
+    JMP D_P_S_END
+OP_LONG_ADD:
+    MOVE.B  #'L',(A2)+
+    JMP D_P_S_END
+    
+D_P_S_END:
+    MOVE.B  #$9,(A2)+ ; space
+
+    JSR EFFECTIVE_ADDRESS_3_5  
+    MOVE.B  #',',(A2)+
+
+    MOVE.L D0, D5 ; register2 // done again just incase
+    LSR.W   #1, D5
+    LSR.L   #8, D5 
+    ANDI.W #%00000111, D5
+    JSR DATA_REGISTER_DIRECT
+    
+    BRA PRINT
+
+SOURCE_PLUS_DESTINATION:
+    CMP #%00000100, D3
+    BEQ OP_BYTE2_ADD
+    CMP #%00000101, D3
+    BEQ OP_WORD2_ADD
+    CMP #%00000110, D3
+    BEQ OP_LONG2_ADD
+    
+OP_BYTE2_ADD:
+    MOVE.B  #'B',(A2)+
+    JMP S_P_D_END
+OP_WORD2_ADD:
+    MOVE.B  #'W',(A2)+
+    JMP S_P_D_END
+OP_LONG2_ADD:
+    MOVE.B  #'L',(A2)+
+    JMP S_P_D_END
+
+S_P_D_END:
+    MOVE.B  #$9,(A2)+ ; space
+    MOVE.L D0, D5 ; register2 // done again just incase
+    LSR.W   #1, D5
+    LSR.L   #8, D5 
+    ANDI.W #%00000111, D5
+    JSR DATA_REGISTER_DIRECT
+
+    MOVE.B  #',',(A2)+
+
+    MOVE.L D0, D5 ;register num
+    JSR EFFECTIVE_ADDRESS_3_5  
+    
+    BRA PRINT
+; -------------------------------------------------------------------------------------
+    
+ADDA:
+    MOVE.B  #'A',(A2)+            ;ADD INSTRUCT NAME TO BUFFER
+    MOVE.B  #'D',(A2)+
+    MOVE.B  #'D',(A2)+
+    MOVE.B  #'A',(A2)+
+
+    MOVE.B  #'.',(A2)+
+    
+    MOVE.W D0, D4 ;mode
+    MOVE.L D0, D5 ;register num
+    
+    MOVE.L D0, D3 ; opmode
+    LSR.L   #6, D3 
+    ANDI.W #%00000111, D3
+    
+    CMP #%00000011, D3 ; word or long
+    BEQ OP_WORD_ADDA
+    CMP #%00000111, D3
+    BEQ OP_LONG_ADDA
+    
+OP_WORD_ADDA:
+    MOVE.B  #'W',(A2)+
+    JMP ADDA_END
+OP_LONG_ADDA:
+    MOVE.B  #'L',(A2)+
+    JMP ADDA_END
+    
+ADDA_END:
+    MOVE.B  #$9,(A2)+ ; space
+
+    JSR EFFECTIVE_ADDRESS_3_5  
+    MOVE.B  #',',(A2)+
+
+    MOVE.L D0, D5 ; register2 // done again just incase
+    LSR.W   #1, D5
+    LSR.L   #8, D5 
+    ANDI.W #%00000111, D5
+    JSR ADDRESS_REGISTER_DIRECT
+    
+    BRA PRINT
+; -------------------------------------------------------------------------------------
+    
+
+code1110:   ;--------------ASL ASR
+    MOVE.W D0,D5
+    MOVE.W D0, D4
+    MOVE.W D0, D1
+    MOVE.B  #'A',(A2)+
+    MOVE.B  #'S',(A2)+
+    ANDI.W #%0000000100000000, D1
+    CMP #%0000000000000000,D1
+    BEQ SHIFT_RIGHT
+    BRA SHIFT_LEFT
+SHIFT_RIGHT:
+    MOVE.B  #'R',(A2)+
+    BRA SIZE_1110
+SHIFT_LEFT:
+    MOVE.B  #'L',(A2)+
+
+SIZE_1110:
+    MOVE.B  #'.',(A2)+
+
+    MOVE D0, D1
+    ANDI.W #%1111111011000000, D1
+    CMP    #%1110000011000000, D1
+    BEQ MEMORY_SHIFT
+    MOVE.W D0, D1
+    ANDI.W #%0000000011000000,D1  ;;ISOLATE SIZE
+    CMP    #%0000000000000000, D1
+    BEQ BYTE_1110
+    CMP    #%0000000001000000, D1
+    BEQ WORD_1110
+    BRA LONG_1110
+BYTE_1110:                            ;SIZE
+    MOVE.B  #'B',(A2)+
+    BRA REG_TO_REG_OR_DATA_TO_REG
+WORD_1110:
+    MOVE.B  #'W',(A2)+
+    BRA REG_TO_REG_OR_DATA_TO_REG
+LONG_1110:
+    MOVE.B  #'L',(A2)+
+
+REG_TO_REG_OR_DATA_TO_REG:    ;CHECK IF REGISTER TO REGISTER OR IMMEDIATE DATA TO REGISTER
+    MOVE.B  #9,(A2)+
+    MOVE.W D0,D1
+    ANDI.W #%0000000000100000,D1
+    CMP    #%0000000000000000,D1
+    BEQ IMMEDIATE_SHIFT        ;IMMEDIATE DATA SHIFT
+    BRA REGISTER_TO_REGISTER   ;REGISTER WITH SHIFT VALUE
+IMMEDIATE_SHIFT:   
+    MOVE.B  #'#',(A2)+
+    MOVE.W D0,D1
+    ANDI.W #%0000111000000000, D1
+    CMP    #%0000000000000000,D1
+    BEQ EIGHT_1110         ;WHEN SHIFT VALUE IS EIGHT
+    ROR.W #8, D1
+    ROR.W #1, D1
+    ADD.W #48, D1
+    MOVE.B D1, (A2)+     ;ADD SHIFT COUNT
+    MOVE.B  #',',(A2)+     ;COMMA
+    MOVE.B  #32,(A2)+    ;SPACE
+    JSR DATA_REGISTER_DIRECT
+    BRA PRINT
+EIGHT_1110:
+    MOVE.B  #56,(A2)+
+    MOVE.B  #',',(A2)+
+    MOVE.B  #32,(A2)+
+    JSR DATA_REGISTER_DIRECT
+    BRA PRINT
+REGISTER_TO_REGISTER:
+    JSR DATA_REGISTER_DIRECT2
+    MOVE.B  #',',(A2)+
+    MOVE.B  #32,(A2)+
+    MOVE.W D0,D5
+    JSR DATA_REGISTER_DIRECT
+    BRA PRINT
+
+MEMORY_SHIFT:
+     MOVE.B  #'W',(A2)+
+     MOVE.B  #9,(A2)+
+     JSR EFFECTIVE_ADDRESS_3_5    
+     BRA PRINT
+
+
 code1111:
     MOVEA.L   #TRUE, A1 
     MOVE.W  #0, D0    
