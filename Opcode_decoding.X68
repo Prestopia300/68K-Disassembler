@@ -3,32 +3,79 @@
 * Written by :
 * Date       :
 * Description:
-*-----------------------------------------------------------
-    ORG    $1000
-START:                  ; first instruction of program
+*----------------------------------------------------------- LOOP FOR ASCII USES A5
+STACK   ;EQU     $2000   
+     ORG    $1000
+START:                 ; first instruction of program      
+    MOVEA   #INTRO, A1   
+    MOVE.W  #0, D0    
+    MOVE.W  #64, D1
+      * write to the display
+    TRAP    #15 
+    JSR TAKE_INPUT                ;AFTER THIS END ADDRESS IN D7
+ 
+VERIFY:
+    CMP A6, D7
+    BLE FOUND_ERROR
+    
+    JMP DECODE
 
-* Put program code here
+FOUND_ERROR
+    MOVEA   #ERRORMESSAGE, A1   
+    MOVE.W  #0, D0    
+    MOVE.W  #64, D1
+      * write to the display
+    TRAP    #15 
+    JSR TAKE_INPUT
 
-;First my implementation takes the following strategies:
-;(a) Let A0 point to the top address of a given jump table
-;(b) Let A5 point to the current machine code.
-;(c) Use D0 to keep the 1st instruction word
-    
-    
-    ; NOTE TO SELF : Focus testing on getting A5 to a certain number, say 1010, which should be A000, or A00 (because 3*4)
-    
-    MOVEA.L #$0400, A5 
-    LEA     buffer, A2          
+
+DECODE ;STARTING ADDRESS IN D2, ENDING ADDRESS IN D3
+          ;intialize buffer     
     ; load the next instruction and jump to the opcode table entry
     LEA     OP_TABLE, A0
     CLR.L   D0
-    MOVE.W  (A5)+, D0           ; load the current instruction word to D0
-    MOVE.L  D0, D1    ; D1 = D0 (current instruction word)
+    CLR D1
+    CLR D5
+    CLR D4
+    CLR D0
+Loop2
+   
+   LEA     buffer, A2   ;PUT BUFFER IN A2
+   MOVE.W A6, D0  ;ADDRESS KEPT IN A5 FOR USE IT ITOA FUNCTION
+   MOVE.W #8, D3
+LOOP_ASCII3:
+   MOVE.L D0,D1     ;MOVE ADDRESS TO D1
+   ANDI.L #$F0000000, D1   ;GET FOUR MSB BITS
+   SUB.L D1,D0              ;REMOVE THOSE FOUR BITS FROM D0 SO THEY ARENT READ AGAIN
+   ROL.L #4,D1              ;ROTATE LEFT SO FOUR MSB ARE NOW LSB AND CAN BE READ AS A SINGLE NUMBER
+   ROL.L #$4, D0            ;ROTATE D0 LEFT SO THAT THE NEXT HEX NUMBER IS READ IN NEXT LOOP ITERATION
+   CMP.B #10, D1            ;IF LESS THAN 10 IT CAN BE ADDED AS NUMBER
+   BLT NUM_ASCII3
+   BRA HEX_ASCII3           ;ELSE IT IS LETTER VALUE IN HEX
+NUM_ASCII3:
+   ADD.B #48,D1             
+   MOVE.B  D1,(A2)+       ;ADD TO BUFFER
+   BRA NEXT_ASCII3
+HEX_ASCII3:
+   ADD.B #55,D1
+   MOVE.B  D1,(A2)+ 
+NEXT_ASCII3:   
+   SUBQ.B #1, D3
+   BNE LOOP_ASCII3
+
+   MOVE.B #$9, (A2)+
+ 
+   CLR D0
+   CLR D1
+   MOVE.W (A6)+,D0
+                       ;----------------------------------------DECODING 
+      
+   MOVE.L  D0, D1    ; D1 = D0 (current instruction word)
     MOVE.B  #12, D2        ; D2 = 12 (hex is 4 chars long)
     LSR.W   D2, D1              ; extract the opcode in D1
     MULU    #6, D1              ; compute the opcode jump displacement
     JMP     0(A0, D1) ;(A0, D1)           ; jump to the opcode table entry    
-
+    
 
 OP_TABLE:
     JMP     code0000            ; ADDI.bwl/ANDI.bwl/CMPI.bwl/EORI.bwl/ORI.bwl etc.
@@ -41,13 +88,15 @@ OP_TABLE:
     JMP     code0111            ; MOVEQ
     JMP     code1000            ; DIVS    /DIVU    /OR.bwl
     JMP     code1001            ; SUB.bwl /SUBA.wl
-    JMP     code1010            ;     (unassigned)
+    ;JMP     code1010            ;     (unassigned)
     JMP     code1011            ; CMP.bwl /CMPA.wl /EOR.bwl
     JMP     code1100            ; MULS    /MULU    /AND.bwl
     JMP     code1101            ; ADD.bwl /ADDA.wl /ADDX.bwl
     JMP     code1110            ; ASL.bwl/ASR.bwl/LSL.bwl /LSR.bwl /ROL.bwl /ROR.bwl
-    JMP     code1111            ;     (unassigned)
-code0000:
+    ;JMP     code1111            ;     (unassigned)
+    ;BRA FOUND_ERROR
+
+code0000:   ;---------------ORI
     
     MOVE.B  #'O',(A2)+            ;ADD INSTRUCT NAME TO BUFFER
     MOVE.B  #'R',(A2)+
@@ -67,7 +116,7 @@ code0000:
 BYTE:                     ;ADD ASCII VALUES TO BUFFER
      MOVE.B  #'B',(A2)+
      MOVE.B #1,D1
-     MOVE.B (A5)+,D7       ;CLEAR ZEROS
+     MOVE.B (A6)+,D7       ;CLEAR ZEROS
      CLR D5
      BRA DONE             ;after adding size character go to routine to add immediate data (CONVERT HEX TO ASCII)
 WORD:
@@ -77,7 +126,7 @@ WORD:
 LONG:
      MOVE.B  #'L',(A2)+
      MOVE.B #3,D1          ;COUNTER
-     MOVE.B (A5)+,D5       ;CLEAR ZEROS
+     MOVE.B (A6)+,D5       ;CLEAR ZEROS
      CLR D5
      BRA DONE
 DONE:
@@ -87,9 +136,9 @@ DONE:
      CLR D3
      
      JSR ITOA                 ;RETURNS HERE AFTER CONVERSION
-     MOVE.B  #$9,(A2)+
+    
      MOVE.B  #',',(A2)+
-
+     MOVE.B  #32,(A2)+
      CLR D5
      MOVE.B D4,D5
      JSR EFFECTIVE_ADDRESS_3_5
@@ -110,13 +159,14 @@ code0001: ;MOVEA and MOVE
      MOVE.W D0, D5
      MOVE.W D0, D4
      MOVE.B  #',',(A2)+
+     MOVE.B  #32,(A2)+
      JSR EFFECTIVE_ADDRESS_6_8
      BRA PRINT    
   
 
         JMP     END
 code0010:
-     MOVE.B #3,D1                 ;IN CASE OF IMMEDIATE DATA
+     MOVE.B #4,D1                 ;IN CASE OF IMMEDIATE DATA
      MOVE.B D0,D3         ;
      MOVE.B D0, D4        ;For effective address
      MOVE.B D0, D5
@@ -136,6 +186,7 @@ MOVEA:
      MOVE.B  #$9,(A2)+
      JSR EFFECTIVE_ADDRESS_3_5
      MOVE.B  #',',(A2)+
+     MOVE.B #32, (A2)+
      MOVE.W D6, D4
      MOVE.W D6, D5
      JSR ADDRESS_REGISTER_DIRECT2       ;WE KNOW DESTINATION IS ADDRESS REGISTER
@@ -150,6 +201,9 @@ MOVE: ;CHECK BITS 8-6 to see if INSTRUCTION IS MOVEA
      MOVE.B  #$9,(A2)+
      JSR EFFECTIVE_ADDRESS_3_5
      MOVE.B  #',',(A2)+
+     MOVE.B  #32, (A2)+
+     MOVE.W D0,D4
+     MOVE.W D0,D5
      JSR EFFECTIVE_ADDRESS_6_8
      BRA DONE2                                ;DO DESTINATION  Instruction in D5 right now
         
@@ -178,6 +232,7 @@ MOVEA2:
      MOVE.B  #$9,(A2)+
      JSR EFFECTIVE_ADDRESS_3_5
      MOVE.B  #',',(A2)+
+     MOVE.B #32, (A2)+
      MOVE.W D6, D4
      MOVE.W D6, D5
      JSR ADDRESS_REGISTER_DIRECT2       ;WE KNOW DESTINATION IS ADDRESS REGISTER
@@ -191,7 +246,10 @@ MOVE2: ;CHECK BITS 8-6 to see if INSTRUCTION IS MOVEA
      MOVE.B  #'W',(A2)+
      MOVE.B  #$9,(A2)+
      JSR EFFECTIVE_ADDRESS_3_5
+     MOVE.W D0,D4
+     MOVE.W D0,D5
      MOVE.B  #',',(A2)+
+     MOVE.B  #32, (A2)+
      JSR EFFECTIVE_ADDRESS_6_8
      BRA DONE2                                ;DO DESTINATION  Instruction in D5 right now
           
@@ -222,6 +280,23 @@ LEA:
     MOVE.B  #'L',(A2)+            ;ADD INSTRUCT NAME TO BUFFER
     MOVE.B  #'E',(A2)+
     MOVE.B  #'A',(A2)+
+    
+    MOVE.B  #$9,(A2)+ ; space
+
+    
+    MOVE.W D0, D4 ;mode
+    MOVE.L D0, D5 ;register num
+    JSR EFFECTIVE_ADDRESS_3_5  
+    
+    MOVE.B  #',',(A2)+
+    MOVE.B  #32, (A2)+
+
+    MOVE.L D0, D5 ; done again, incase mode 111 changes D5
+    LSR.W   #1, D5 ; register num
+    LSR.L   #8, D5 
+    ANDI.W #%00000111, D5
+    JSR ADDRESS_REGISTER_DIRECT
+    
     BRA PRINT
 MOVEM:    
     MOVE.B  #'M',(A2)+            ;ADD INSTRUCT NAME TO BUFFER
@@ -268,10 +343,11 @@ REGISTER_TO_MEMORY:
     ANDI.B #%00111000, D4
     
     ;REGISTER
-    MOVE.W (A5)+, D1 ; D1 : register opcode   
+    MOVE.W (A6)+, D1 ; D1 : register opcode   
     JSR ADD_REGISTER ; must know mode (in D4)
     MOVE.B  #',',(A2)+
-    
+    MOVE.B  #32, (A2)+
+
     CLR D5
     MOVE.B D0, D5 ; register
     ANDI.B #%00000111, D5
@@ -298,14 +374,14 @@ MEMORY_TO_REGISTER:
     JSR EFFECTIVE_ADDRESS_3_5
     
     MOVE.B  #',',(A2)+
-    MOVE.W (A5)+, D1 ; D3 used for register index
+    MOVE.W (A6)+, D1 ; D3 used for register index
     
     ;REGISTER
     JSR ADD_REGISTER
     JMP PRINT
     
 ADDRESS_TO_REGISTER: ; special case for mode 111
-    MOVE.W (A5)+, D6 ; pop here (D1 used in ITOA and ADDRESS. temporarally use )
+    MOVE.W (A6)+, D6 ; pop here (D1 used in ITOA and ADDRESS. temporarally use )
      
     MOVE.B D3, D5 ; D5 is register
     JSR EFFECTIVE_ADDRESS_3_5
@@ -418,24 +494,18 @@ code0101:
     
 BYTE_ADDQ:                     ;ADD ASCII VALUES TO BUFFER
      MOVE.B  #'B',(A2)+
-     MOVE.B #1,D1
-     MOVE.B (A5)+,D7       ;CLEAR ZEROS
-     CLR D5
-     BRA NEXT_ADDQ             ;after adding size character go to routine to add immediate data (CONVERT HEX TO ASCII)
+     BRA NEXT_ADDQ             
 WORD_ADDQ:
      MOVE.B  #'W',(A2)+
-     MOVE.B #2,D1        ;Make loop counter 2 for the the 4 HEX VALUES that make up 16 bits, 4 bytes
      BRA NEXT_ADDQ
 LONG_ADDQ:
      MOVE.B  #'L',(A2)+
-     MOVE.B #3,D1          ;COUNTER
-     MOVE.B (A5)+,D5       ;CLEAR ZEROS
-     CLR D5
+     
     
 NEXT_ADDQ:
      MOVE.B  #$9,(A2)+
      MOVE.B  #'#',(A2)+
-     MOVE.B  #'%',(A2)+
+     MOVE.B  #'$',(A2)+
      CLR D3
      
      MOVE.W D0, D2
@@ -444,32 +514,21 @@ NEXT_ADDQ:
      ROR.W #8, D2
      ROR.W #1, D2
 
-LOOP_ADDQ:
-     ROR.W #1 ,D2
-     BCC ZERO
-     BRA ONE
-ZERO:
-    MOVE.B  #'0',(A2)+
-    SUBQ #1,D3
-    BNE LOOP_ADDQ
-     BRA EA_ADDQ
-ONE:
-    MOVE.B #'1',(A2)+ 
-    SUBQ #1,D3
-    BNE LOOP_ADDQ
-    BRA EA_ADDQ
-EA_ADDQ: 
-     MOVE.B  #$9,(A2)+
+    
+     ADD.W #48, D2
+     MOVE.B D2, (A2)+
      MOVE.B  #',',(A2)+
+     MOVE.B  #32, (A2)+
 
+    
      CLR D5
      MOVE.B D4,D5
      JSR EFFECTIVE_ADDRESS_3_5
      BRA PRINT       
-code0110:
+code0110:                           ;----------BAR BSR--------------
     MOVE.W D0,D1
     ANDI.W #%1111110000000000, D1
-    CMP    #%0110000100000000, D1
+    CMP    #%0110000000000000, D1
     BEQ BSR_CODE
     BRA BRA_CODE
 BSR_CODE:
@@ -503,7 +562,7 @@ BYTE_DISPLACE:
 WORD_DISPLACE: 
    MOVE #4, D3 ;COUNTER
    MOVE.W #4,D1
-   MOVE.W (A5)+ ,D0
+   MOVE.W (A6)+ ,D0         
    NOT.W D0                ;ONE BYTE
    ADD.W #1,D0                 ;twos complement
    ROR.W #8,D0
@@ -536,7 +595,7 @@ code0111:           ;MOVEQ
     MOVE.B  #'V',(A2)+
     MOVE.B  #'E',(A2)+
     MOVE.B  #'Q',(A2)+
-    MOVE.B  #32,(A2)+
+    MOVE.B  #9,(A2)+
     MOVE.B  #'#',(A2)+
     MOVE.B  #'$',(A2)+
     
@@ -583,7 +642,8 @@ code1000:
     JSR EFFECTIVE_ADDRESS_3_5  
     
     MOVE.B  #',',(A2)+
-    
+    MOVE.B  #32, (A2)+
+
     MOVE.L D0, D5 ; done again, incase mode 111 changes D5
     LSR.W   #1, D5 ; register num
     LSR.L   #8, D5 
@@ -678,7 +738,7 @@ S_M_D_END:
 
 
 code1010:
-    MOVEA   #FALSE, A1 
+   ; MOVEA   #FALSE, A1 
     TRAP    #15
     JMP     END
 code1011:
@@ -737,8 +797,11 @@ code1100:            ;MULU
     MOVE.B  #'U',(A2)+
     MOVE.B  #'.',(A2)+
     MOVE.B  #'W',(A2)+
-
+ 
+   MOVE.B #9, (A2)+
    JSR EFFECTIVE_ADDRESS_3_5
+   MOVE.B  #',',(A2)+
+   MOVE.B #32, (A2)+
    JSR DATA_REGISTER_DIRECT2
    BRA PRINT
 
@@ -836,6 +899,7 @@ S_P_D_END:
     JSR DATA_REGISTER_DIRECT
 
     MOVE.B  #',',(A2)+
+    MOVE.B  #32, (A2)+
 
     MOVE.L D0, D5 ;register num
     JSR EFFECTIVE_ADDRESS_3_5  
@@ -968,7 +1032,7 @@ MEMORY_SHIFT:
 
 
 code1111:
-    MOVEA.L   #TRUE, A1 
+    ;MOVEA.L   #TRUE, A1 
     MOVE.W  #0, D0    
     MOVE.W  #64, D1
     TRAP    #15
@@ -1040,18 +1104,18 @@ ABSOLUTE_ADDRESS_OR_IMMED_DATA:
 IMMEDIATE_DATA:         
         MOVE.B  #'#',(A2)+
         MOVE.B  #'$',(A2)+
-        CMP #1,D1
-        BEQ REMOVE1
-        CMP #3, D1
-        BEQ REMOVE2
-        BRA FIXED    ;BRANCH TO FIXED IF WORD
-REMOVE1:              ;BYTE
-       MOVE.B (A5)+,D7  ;REMOVE ZEROS
-       BRA FIXED
-REMOVE2:
-       MOVE.B (A5)+,D7
-       BRA FIXED
-FIXED:        
+        ;CMP #1,D1
+        ;BEQ REMOVE1
+       ; CMP #3, D1
+        ;BEQ REMOVE2
+        ;BRA FIXED    ;BRANCH TO FIXED IF WORD
+;REMOVE1:              ;BYTE
+    ;   MOVE.B (A6)+,D7  ;REMOVE ZEROS
+      ; BRA FIXED
+;REMOVE2:
+      ; MOVE.B (A6)+,D7
+       ;BRA FIXED
+;FIXED:        
 
         JSR ITOA
         MOVE.W D6, D5
@@ -1135,24 +1199,24 @@ ADDRESS_REGISTER_DECREMENT2:
 
 ABSOLUTE_ADDRESS_OR_IMMED_DATA2:        MOVE.B  #'$',(A2)+
         ANDI.W #%111000000000, D5
-        CMP    #%001000000000, D5
+        CMP    #%100000000000, D5
         BEQ IMMEDIATE_DATA2
         BRA ADDRESS2
 IMMEDIATE_DATA2:
         MOVE.B  #'#',(A2)+
         MOVE.B  #'$',(A2)+
-        CMP #1,D1       ;REMOVE ZEROS
-        BEQ REMOVE3
-        CMP #3, D1
-        BEQ REMOVE4
-        BRA FIXED2
-REMOVE3:
-       MOVE.B (A5)+,D7
-       BRA FIXED2
-REMOVE4:
-       MOVE.B (A5)+,D7
-       BRA FIXED2
-FIXED2:        
+        ;CMP #1,D1       ;REMOVE ZEROS
+       ; BEQ REMOVE3
+        ;CMP #3, D1
+        ;;BEQ REMOVE4
+        ;BRA FIXED2
+;REMOVE3:
+      ; MOVE.B (A6)+,D7
+      ; BRA FIXED2
+;REMOVE4:
+    ;  MOVE.B (A6)+,D7
+       ;BRA FIXED2
+;FIXED2:        
         JSR ITOA
         MOVE.W D6, D5
         RTS
@@ -1173,9 +1237,9 @@ LONG_LENGTH2:
         
         
 ITOA:
-    
+    CLR D5
 LOOPFORASCII: 
-     MOVE.B (A5)+,D5 ;get two hex values
+     MOVE.B (A6)+,D5 ;get two hex values
      MOVE.W D5,D2     ; put it in a word so rotating works
      ROR.W #4, D2     ;ROTATE four bits so they end up on far left side, and isolates other 4 bits
      
@@ -1215,25 +1279,123 @@ PRINT:
      LEA     buffer, A1
      TRAP    #15
 
+OP_DATA_CLR:
+        CLR.L   D3
+        MOVE.B  #bufsize, D3        ; D3 = bufsize as a counter
+                ; for ( int D3 = 64; D3 > 0; D3--)
+OP_DATA_CLR_LOOP:
+        MOVE.B  #0, (A1)+           ;   (An)++ = $0;
+        SUBI    #1, D3
+        BGT     OP_DATA_CLR_LOOP
+     
+     CMP.L A6,D7        ;------------------------------------------CHECK IF ENDED A6 CURRENT ADDRESS D7 END ADDRESS
+     BGT Loop2
+     BRA CONTINUE_OR_QUIT
+   
+   
+CONTINUE_OR_QUIT:
+    
+    MOVE.W  #0, D0    
+    MOVE.W  #64, D1
+    MOVEA   #CONTINUEPROMPT, A1    ;GET y n or empty
+    TRAP    #15                    :PRINT IT
+    MOVEA $0000, A1
+    MOVE.L  #2, D0      * read from the keyboard
+    CLR D1
+    TRAP    #15  
+    
+    CLR D7
+    MOVE.B (A1)+,D7  ;GETS Y or N
  
-TRUE: DC.B    'True',0 ;64 bytes
-FALSE: DC.B    'False',0 ;64 bytes
-ENDING: DC.B    'Ending',0 ;64 bytes
+    CMP #'Y',D7
+    BEQ TAKE_INPUT
+    CMP #'N',D7 
+    BEQ EXIT_MESSAGE
+EXIT_MESSAGE:
+    MOVE.W  #0, D0    
+    MOVE.W  #64, D1
+    MOVEA   #EXITMESSAGE, A1    ;GET y n or empty
+    TRAP    #15                    :PRINT IT
+
+
+    BRA END         
+   
+
+  
+  
+TAKE_INPUT:
+    CLR D7
+    MOVE.W #$00,(A6)
+    MOVE.W  #0, D0    
+    MOVE.W  #64, D1
+    MOVEA   #PROMPT, A1
+    TRAP    #15
+    LEA     START_ADDRESS, A1  ; address to store address
+    MOVE.L  #2, D0      * read from the keyboard
+    CLR D1
+    TRAP    #15         ;address now in A1
+    
+    JSR ATOI                        ;FOR THE START ADDRESS       
+    
+    MOVE.L D7,A6
+    CLR D7                   ;MOVE START ADDRESS TO D2            
+    MOVE.W  #0, D0    
+    MOVE.W  #64, D1
+    MOVEA   #ENDPROMPT, A1    ;GET END ADDRESS
+    TRAP    #15                     ;PRINT PROMPT 
+    LEA     END_ADDRESS, A1         ; address to store address
+    MOVE.L  #2, D0                  * read from the keyboard
+    CLR D1
+    TRAP    #15                        ;address now in A1
+    JSR ATOI                  ;END ADDRESS in D7
+    BRA DECODE
+    BRA VERIFY
+
+ATOI:   
+     CLR D3
+     MOVEA.L A1, A3      ; A2 = string pointer to next character to capitalize
+     MOVE.L #256, D6     ;Use to convert to HEX
+; -48 loop
+Loop1
+    CLR D5
+    MOVE.B (A3)+,D5  ; make number (-48; -00110000)
+    SUBI.L #48, D5   ;Get decimal value by subtracting 48
+    MULS.W D6, D5     ; multiply it by D5 to get the answer in hex
+    ADD.L D5,D7       ;Add the result to D7 eventualy add up to the full hex value
+    DIVS.W #16, D6     ; Divide D6 so that the value is converted to its position in hex
+    SUBQ.L #1, D1       ; decriment loop counter
+    BNE Loop1           ; loops untill D2 reaches 0
+    RTS                  
+   
+
+
+    SIMHALT             ; halt simulator
+
+* Put variables and constants here
+   INTRO: DC.B    'Welcome to 68K disassembler',0 ;64 bytes
+   ENDPROMPT: DC.B 'Enter end address: ',0 ;64 bytes
+   CONTINUEPROMPT: DC.B    'Enter Y or N to restart or stop the dissasembler',0 ;64 bytes
+   EXITMESSAGE: DC.B    'Thanks for using this 68K disassemble, goodbye',0 ;64 bytes
+   ERRORMESSAGE: DC.B    'Error : start address is greater than end address',0 ;64 bytes
+
+PROMPT:
+   DC.B    'Enter start address: ',0 ;64 bytes
+START_ADDRESS:
+    DS    64
+END_ADDRESS:
+    DS    64
+
+         ; last line of source
+
+
+
 
 
 bufsize	EQU	64	; 64 characters would be good enough
 buffer	DS.B	bufsize	; a line of decoded data to print to screen
 
-END:
-;    MOVEA   #ending, A1 
-;    TRAP    #15
-    SIMHALT             ; halt simulator
-
-* Put variables and constants here
-
-    END    START        ; last line of source
-    
-
+END
+      END  START 
 
 
 
